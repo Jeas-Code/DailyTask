@@ -358,8 +358,16 @@ footer{text-align:center;color:var(--mute);font-size:12.5px;padding:26px 16px 8p
     </div>
     <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-size:13px;color:var(--sub);font-weight:600">跨端同步</span>
-        <span style="font-size:12px;color:var(--mute)">手机/PC 数据不互通，用同步码手动迁移</span>
+        <span style="font-size:13px;color:var(--sub);font-weight:600">自动同步（云端）</span>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--sub);cursor:pointer">
+          <input type="checkbox" id="syncOn" style="width:auto;min-height:0;margin:0;accent-color:var(--pri)"> 开启
+        </label>
+        <input id="syncKey" placeholder="同步密钥（多设备填相同）" style="min-height:34px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--txt);font-size:13px;width:210px;max-width:100%">
+        <button class="btn sm pri" onclick="saveSyncCfg()">保存同步设置</button>
+        <span id="syncStatus" style="font-size:12px;color:var(--mute)"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <span style="font-size:12px;color:var(--mute)">手动迁移（兜底）：</span>
         <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--sub);cursor:pointer">
           <input type="checkbox" id="syncAI" checked style="width:auto;min-height:0;margin:0;accent-color:var(--pri)"> 含 AI 配置
         </label>
@@ -673,6 +681,8 @@ footer{text-align:center;color:var(--mute);font-size:12.5px;padding:26px 16px 8p
 var K_TASKS = 'wb_dtw_tasks';
 var K_AI    = 'wb_dtw_aicfg';
 var K_META  = 'wb_dtw_meta';
+var K_SYNC_KEY = 'wb_dtw_synckey';
+var K_SYNC_ON  = 'wb_dtw_syncon';
 
 var DEFAULT_SYS = '你是一位资深项目推进助理。用户会给你一条具体任务的上下文（名称、截止日、风险、协助人、进度）。'
   + '请给出直接可执行的中文回答：结论先行，步骤编号，明确到"今天做什么、找谁、说什么"。'
@@ -741,13 +751,16 @@ function normalize(t){
     progress: Math.max(0, Math.min(100, parseInt(t.progress,10) || 0)),
     createdAt: t.createdAt || new Date().toISOString(),
     doneAt: t.doneAt || null,
+    updatedAt: t.updatedAt || (t.createdAt ? new Date(t.createdAt).getTime() : Date.now()) || Date.now(),
+    _del: !!t._del,
     aiNotes: Array.isArray(t.aiNotes) ? t.aiNotes : []
   };
 }
-function save(){
+function saveLocal(){
   try{ localStorage.setItem(K_TASKS, JSON.stringify(state.tasks)); }
   catch(e){ toast('保存失败：本地存储可能已满'); }
 }
+function save(){ saveLocal(); schedulePush(); }
 
 /* ---------- 示例数据 ---------- */
 function demoTasks(){
@@ -784,9 +797,11 @@ function clearDemo(){
   toast(before === state.tasks.length ? '没有检测到示例数据' : '已清空 ' + (before - state.tasks.length) + ' 条示例数据');
 }
 function clearAll(){
-  confirmBox('清空全部数据', '将删除<b>全部 ' + state.tasks.length + ' 条任务</b>及其 AI 记录，不可撤销。<br><br>确定要继续吗？', function(){
+  var n = activeTasks().length;
+  confirmBox('清空全部数据', '将删除<b>全部 ' + n + ' 条任务</b>及其 AI 记录，不可撤销。<br><br>确定要继续吗？', function(){
     confirmBox('再次确认', '真的要清空吗？建议先点「导出备份」。', function(){
-      state.tasks = []; save(); render(); toast('已清空全部数据');
+      state.tasks.forEach(function(t){ t._del = true; setUpdated(t); });
+      save(); render(); toast('已清空全部数据');
     });
   });
 }
@@ -873,10 +888,10 @@ function renderBackupTip(){
 }
 
 function renderToday(){
-  var over = state.tasks.filter(isOverdue);
-  var td   = state.tasks.filter(isDueToday);
-  var soon = state.tasks.filter(isSoon);
-  var doneToday = state.tasks.filter(function(t){ return t.status==='done' && t.doneAt && t.doneAt.slice(0,10) === today(); });
+  var over = activeTasks().filter(isOverdue);
+  var td   = activeTasks().filter(isDueToday);
+  var soon = activeTasks().filter(isSoon);
+  var doneToday = activeTasks().filter(function(t){ return t.status==='done' && t.doneAt && t.doneAt.slice(0,10) === today(); });
 
   $('todayChips').innerHTML =
     '<span class="chip ' + (over.length ? 'red' : 'grey') + '">逾期 ' + over.length + '</span>' +
@@ -966,7 +981,7 @@ function taskRowHTML(t){
 function renderList(){
   var kw = ($('searchInput').value || '').trim().toLowerCase();
   var f = state.filter;
-  var arr = state.tasks.filter(function(t){
+  var arr = activeTasks().filter(function(t){
     if(f === 'overdue' && !isOverdue(t)) return false;
     if(f === 'high' && t.risk !== 'high') return false;
     if(['todo','doing','done'].indexOf(f) >= 0 && t.status !== f) return false;
@@ -986,7 +1001,7 @@ function renderList(){
     return new Date(b.createdAt) - new Date(a.createdAt);
   });
 
-  $('listCount').textContent = '· 共 ' + arr.length + ' 条 / 全部 ' + state.tasks.length + ' 条';
+  $('listCount').textContent = '· 共 ' + arr.length + ' 条 / 全部 ' + activeTasks().length + ' 条';
 
   if(!arr.length){
     $('taskRows').innerHTML = '<div class="empty">没有匹配的任务</div>';
@@ -1021,7 +1036,7 @@ function toggleMoreRow(btn){
 
 /* ---------- 看板 ---------- */
 function renderDash(){
-  var ts = state.tasks;
+  var ts = activeTasks();
   var total = ts.length;
   var done = ts.filter(function(t){ return t.status === 'done'; }).length;
   var doing = ts.filter(function(t){ return t.status === 'doing'; }).length;
@@ -1150,6 +1165,7 @@ function saveTask(){
       Object.keys(data).forEach(function(k){ t[k] = data[k]; });
       if(!wasDone && t.status === 'done') t.doneAt = new Date().toISOString();
       if(t.status !== 'done') t.doneAt = null;
+      setUpdated(t);
     }
     toast('已更新任务');
   }else{
@@ -1185,7 +1201,7 @@ function delTask(id){
   var t = state.tasks.filter(function(x){ return x.id === id; })[0];
   if(!t) return;
   confirmBox('删除任务', '确定删除「<b>' + esc(t.title) + '</b>」？此操作不可撤销。', function(){
-    state.tasks = state.tasks.filter(function(x){ return x.id !== id; });
+    t._del = true; setUpdated(t);
     save(); render(); toast('已删除');
   });
 }
@@ -1194,7 +1210,7 @@ function toggleDone(id){
   if(!t) return;
   if(t.status === 'done'){ t.status = 'doing'; t.doneAt = null; if(t.progress === 100) t.progress = 80; }
   else { t.status = 'done'; t.progress = 100; t.doneAt = new Date().toISOString(); toast('搞定一件，' + t.title.slice(0,12) + '…'); }
-  save(); render();
+  setUpdated(t); save(); render();
 }
 function bump(id, n){
   var t = state.tasks.filter(function(x){ return x.id === id; })[0];
@@ -1202,14 +1218,14 @@ function bump(id, n){
   t.progress = Math.min(100, t.progress + n);
   if(t.progress === 100){ t.status = 'done'; t.doneAt = new Date().toISOString(); }
   else if(t.status === 'todo') t.status = 'doing';
-  save(); render();
+  setUpdated(t); save(); render();
 }
 function postpone(id){
   var t = state.tasks.filter(function(x){ return x.id === id; })[0];
   if(!t) return;
   var base = dayDiff(t.due, today()) < 0 ? new Date() : parseYMD(t.due);
   t.due = ymd(new Date(base.getTime() + 86400000));
-  save(); render(); toast('已顺延到 ' + t.due);
+  setUpdated(t); save(); render(); toast('已顺延到 ' + t.due);
 }
 
 /* ---------- 导入导出 ---------- */
@@ -1261,10 +1277,95 @@ function doMerge(incoming){
   state.tasks.forEach(function(t){ map[t.id] = t; });
   incoming.forEach(function(t){ var n = normalize(t); map[n.id] = n; });
   state.tasks = Object.keys(map).map(function(k){ return map[k]; });
-  save(); render(); toast('导入完成，现有 ' + state.tasks.length + ' 条任务');
+  state.tasks.forEach(function(t){ setUpdated(t); });
+  save(); render(); toast('导入完成，现有 ' + activeTasks().length + ' 条任务');
 }
 
-/* ---------- 跨端同步 ---------- */
+/* ---------- 自动同步（EdgeOne Pages KV） ---------- */
+var syncKey = '', syncOn = false, syncRev = 0, _pushTm = null, _pullIv = null;
+function activeTasks(){ return state.tasks.filter(function(t){ return !t._del; }); }
+function setUpdated(t){ t.updatedAt = Date.now(); if(t.updatedAt > syncRev) syncRev = t.updatedAt; }
+function saneKey(k){ return 'dt_' + String(k || '').replace(/[^A-Za-z0-9_]/g, '').slice(0, 64); }
+function clock(){ var d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+function setSyncStatus(s){ var el = $('syncStatus'); if(el) el.textContent = s; }
+function syncCfgLoad(){
+  try{
+    syncKey = localStorage.getItem(K_SYNC_KEY) || '';
+    syncOn = localStorage.getItem(K_SYNC_ON) === '1' && !!syncKey;
+  }catch(e){ syncOn = false; }
+}
+function syncInit(){
+  syncCfgLoad();
+  var cb = $('syncOn'); if(cb) cb.checked = syncOn;
+  var ki = $('syncKey'); if(ki && !ki.value) ki.value = syncKey;
+  updateSyncUI();
+  if(syncOn){ pullSync(); _pullIv = setInterval(pullSync, 20000); }
+}
+function updateSyncUI(){
+  var el = $('syncStatus');
+  if(el) el.textContent = syncOn ? (el.textContent || '已开启') : (syncKey ? '未开启自动同步' : '未配置同步密钥');
+}
+function saveSyncCfg(){
+  var k = ($('syncKey').value || '').trim();
+  if(saneKey(k).length < 8){ toast('同步密钥至少 4 位（字母/数字/下划线）'); $('syncKey').focus(); return; }
+  syncKey = k;
+  syncOn = $('syncOn').checked;
+  try{
+    localStorage.setItem(K_SYNC_KEY, syncKey);
+    localStorage.setItem(K_SYNC_ON, syncOn ? '1' : '0');
+  }catch(e){}
+  if(syncOn){
+    setSyncStatus('正在同步…');
+    pullSync();
+    if(!_pullIv) _pullIv = setInterval(pullSync, 20000);
+    schedulePush();
+    toast('自动同步已开启');
+  }else{
+    if(_pullIv){ clearInterval(_pullIv); _pullIv = null; }
+    setSyncStatus('已关闭');
+    toast('自动同步已关闭');
+  }
+}
+function schedulePush(){
+  if(!syncOn || !syncKey) return;
+  clearTimeout(_pushTm);
+  _pushTm = setTimeout(pushSync, 700);
+}
+async function pushSync(){
+  if(!syncOn || !syncKey) return;
+  try{
+    var aicfg = null;
+    try{ aicfg = JSON.parse(localStorage.getItem(K_AI) || 'null'); }catch(e){}
+    var body = JSON.stringify({ key: syncKey, rev: syncRev, tasks: state.tasks, aicfg: aicfg });
+    var res = await fetch('/api/sync', { method:'POST', headers:{'content-type':'application/json'}, body: body });
+    if(res.ok){ var d = await res.json(); if(d && d.rev) syncRev = Math.max(syncRev, d.rev); setSyncStatus('已同步 ' + clock()); }
+    else setSyncStatus('同步失败(' + res.status + ')');
+  }catch(e){ setSyncStatus('同步错误'); }
+}
+async function pullSync(){
+  if(!syncOn || !syncKey) return;
+  try{
+    var res = await fetch('/api/sync?key=' + encodeURIComponent(syncKey));
+    if(!res.ok) return;
+    var d = await res.json();
+    if(d && d.rev && d.rev > syncRev){
+      var map = {};
+      activeTasks().forEach(function(t){ map[t.id] = t; });
+      (d.tasks || []).forEach(function(t){
+        if(t._del){ if(map[t.id]){ map[t.id]._del = true; map[t.id].updatedAt = Math.max(map[t.id].updatedAt || 0, t.updatedAt || 0); } return; }
+        var e = map[t.id];
+        if(!e || (t.updatedAt || 0) >= (e.updatedAt || 0)) map[t.id] = t;
+      });
+      state.tasks = Object.keys(map).map(function(k){ return map[k]; });
+      syncRev = d.rev;
+      saveLocal(); render();
+      if(d.aicfg && (d.aicfg.base || d.aicfg.key)){ if(applyAICfg(d.aicfg)) refreshAIStatus(); }
+      setSyncStatus('已同步 ' + clock());
+    }
+  }catch(e){ setSyncStatus('拉取失败'); }
+}
+
+/* ---------- 跨端同步（手动迁移码） ---------- */
 function encodeSync(withAI){
   var cfg = {};
   if(withAI){
@@ -1384,8 +1485,8 @@ function refreshAIStatus(){
 function renderAITaskSel(){
   var sel = $('aiTaskSel');
   var cur = sel.value;
-  var undone = state.tasks.filter(function(t){ return t.status !== 'done'; });
-  var doneT = state.tasks.filter(function(t){ return t.status === 'done'; });
+  var undone = activeTasks().filter(function(t){ return t.status !== 'done'; });
+  var doneT = activeTasks().filter(function(t){ return t.status === 'done'; });
   var html = '<option value="">（不关联，问全局问题）</option>';
   html += undone.map(function(t){
     return '<option value="' + t.id + '">' + (isOverdue(t) ? '[逾期] ' : '') + esc(t.title.slice(0,40)) + ' · ' + t.due + '</option>';
@@ -1409,7 +1510,7 @@ function taskContext(t){
     + '【协助人】' + (t.helpers.length ? t.helpers.join('、') : '无，需独立完成') + '\n';
 }
 function globalContext(){
-  var over = state.tasks.filter(isOverdue);
+  var over = activeTasks().filter(isOverdue);
   var td = state.tasks.filter(isDueToday);
   var soon = state.tasks.filter(isSoon);
   var fmt = function(t){
@@ -1641,6 +1742,7 @@ async function testAI(){
   try{ savedTheme = localStorage.getItem(K_THEME) || 'light'; }catch(e){}
   applyTheme(savedTheme);
   render();
+  syncInit();
 
   $('segFilter').addEventListener('click', function(e){
     var b = e.target.closest('button'); if(!b) return;
