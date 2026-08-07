@@ -45,3 +45,17 @@
 - **深色模式**：全站 CSS 变量化（`--bg/--card/--txt/--field/--track/--pri` 等），`html[data-theme="dark"]` 覆盖整套变量；顶栏新增「深色/浅色」切换按钮，选择持久化到 `localStorage`（key `wb_dtw_theme`），下次打开自动恢复。图表 SVG 全部改用变量着色，暗色下清晰可读。
 - **今日作战计划入口**：「今天要处理」顶栏新增「今日作战计划」按钮，一键让 AI 读取今天全部任务（逾期/今天到期/3 天内），输出优先级排序 + 时间块建议，并自动滚动到 AI 区查看结果。
 - 暗色下反白元素已处理：`.btn.danger`、`.kpi`、`.cbx`、`.chip.grey`、`.pbar` 进度条、`.ai-out th`、`.toast`、排序下拉框均改用变量；主按钮/导航高亮在暗色下改用深色文字保证对比度。
+
+## 迭代 v3：背景图 + 周分组 + 跨端同步 + 项目迁移
+
+- **任务背景图**：将用户提供的图片（远坂凛）压缩为 1600px 宽 JPEG(base64 ~100KB) 内联进 CSS `body::before`（封面式 fixed 背景，浅色透明度 0.12/暗色 0.06，卡片为不透明实底保证可读性）。全程零外链。
+- **任务清单按周分组**：`renderList()` 先用 `weekInfo(due)`（周一为起点、ISO 周序号、含本周/上周/下周相对标记）分组，再渲染可折叠的「第 N 周（起止日期）· N 项」吸顶分组头；默认排序改为「按截止日」。提取 `taskRowHTML(t)` 复用行 HTML。
+- **跨端同步（修复手机/PC 不同步）**：根因是 localStorage 按「设备+浏览器」隔离，部署页无后端，所以两端数据天然不互通。新增「同步码」机制——`复制同步码`（全量任务 base64 编码写入剪贴板）/ `粘贴同步码`（解码后按 id 合并），在 PC 复制、手机粘贴即可迁移。界面已在 moreBar 提示「手机/PC 数据不互通，用同步码手动迁移」。
+- **同步码可携带 AI 配置**：同步区新增「含 AI 配置」勾选（默认勾选）。勾选时同步码一并编码 `wb_dtw_aicfg`（Base URL / API Key / 模型名），粘贴恢复时自动写入本机并刷新 AI 状态；取消勾选则只同步任务，避免 Key 经明文聊天外泄。对旧版（无 aicfg）同步码向后兼容。
+- **项目迁移**：`daily-task-workbench/` 已整体迁移至 `C:\Programs\DailyTask`，git 初始化并推送到 GitHub `Jeas-Code/DailyTask`（公开仓库）。本机 `C:\Program Files\GitHub CLI\gh.exe`（v2.93.0，已登录 Jeas-Code，权限齐全）可用；PATH 里的 npm 版 `gh` 包已损坏不可用，后续 GitHub 操作用 exe 全路径。
+- 已重新部署到新链接（见顶部）。
+
+## 链接
+
+- 线上（手机/PC 共用）：https://2d82a6af9388416eb87882901ca7517e.sh3.agentos-app.net
+- 源代码：https://github.com/Jeas-Code/DailyTask
