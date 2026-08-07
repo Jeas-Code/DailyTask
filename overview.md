@@ -1,6 +1,6 @@
 # 每日任务工作台 — 交付说明
 
-**文件**：`daily-task-workbench/index.html`（单文件，72KB，零外部依赖，双击即用）
+**文件**：`index.html`（单文件前端，零外部依赖，双击即用）+ `functions/api/sync.js`（EdgeOne Pages 同步后端）
 
 ## 四个模块
 
@@ -50,12 +50,32 @@
 
 - **任务背景图**：将用户提供的图片（远坂凛）压缩为 1600px 宽 JPEG(base64 ~100KB) 内联进 CSS `body::before`（封面式 fixed 背景，浅色透明度 0.12/暗色 0.06，卡片为不透明实底保证可读性）。全程零外链。
 - **任务清单按周分组**：`renderList()` 先用 `weekInfo(due)`（周一为起点、ISO 周序号、含本周/上周/下周相对标记）分组，再渲染可折叠的「第 N 周（起止日期）· N 项」吸顶分组头；默认排序改为「按截止日」。提取 `taskRowHTML(t)` 复用行 HTML。
-- **跨端同步（修复手机/PC 不同步）**：根因是 localStorage 按「设备+浏览器」隔离，部署页无后端，所以两端数据天然不互通。新增「同步码」机制——`复制同步码`（全量任务 base64 编码写入剪贴板）/ `粘贴同步码`（解码后按 id 合并），在 PC 复制、手机粘贴即可迁移。界面已在 moreBar 提示「手机/PC 数据不互通，用同步码手动迁移」。
+- **跨端同步（手动码，兜底）**：根因是 localStorage 按「设备+浏览器」隔离，纯静态托管（CloudStudio/EdgeOne/GitHub Pages 都只是托管文件，不存数据）两端天然不互通。保留「同步码」机制作兜底——`复制同步码` / `粘贴同步码` 按 id 合并迁移。详见 v4 真同步。
 - **同步码可携带 AI 配置**：同步区新增「含 AI 配置」勾选（默认勾选）。勾选时同步码一并编码 `wb_dtw_aicfg`（Base URL / API Key / 模型名），粘贴恢复时自动写入本机并刷新 AI 状态；取消勾选则只同步任务，避免 Key 经明文聊天外泄。对旧版（无 aicfg）同步码向后兼容。
 - **项目迁移**：`daily-task-workbench/` 已整体迁移至 `C:\Programs\DailyTask`，git 初始化并推送到 GitHub `Jeas-Code/DailyTask`（公开仓库）。本机 `C:\Program Files\GitHub CLI\gh.exe`（v2.93.0，已登录 Jeas-Code，权限齐全）可用；PATH 里的 npm 版 `gh` 包已损坏不可用，后续 GitHub 操作用 exe 全路径。
 - 已重新部署到新链接（见顶部）。
 
+## 迭代 v4：EdgeOne Pages KV 真同步（解决手机/PC 实时同步）
+
+- **根因澄清**：之前「不同步」是架构问题——纯静态托管**没有任何后端存数据**，各浏览器 localStorage 隔离。把托管商从 CloudStudio 换到 EdgeOne Pages（静态）**不会**改善同步。真正的修复是上后端。
+- **方案**：用 **EdgeOne Pages Functions + KV 存储** 做轻量同步服务，所有设备共享一份云端数据：
+  - `functions/api/sync.js`：GET 按 `key`（用户自设同步密钥，服务端清洗为 `dt_<a-zA-Z0-9_>`）读取 KV；POST 按任务 `id` + `updatedAt` **逐条合并**（取较新者），支持删除墓碑 `_del` 传播。AI 配置（Base URL/Key/模型）也随同步负载透传。
+  - 客户端 `save()` 改钩子 `schedulePush()`（改动后 700ms 防抖推送）；开启同步时 `init` 拉取一次 + 每 20s 轮询拉取；状态在 moreBar「同步状态」显示。
+  - 合并策略为 **per-task last-write-wins（按 updatedAt）**，删除用墓碑标记而非物理删除，因此两端增/改/删都能正确传播；冲突时较新修改胜出。
+- **数据隐私**：开启自动同步后，任务数据（及勾选时的 AI Key）会写入 EdgeOne 云端 KV（你 EdgeOne 账户的 1GB 额度内）。接受此前提再开启。
+- **已验证**：node vm + DOM 桩测试——种子任务带 `updatedAt/_del`、拉取合并远端任务、删除墓碑生效、push 回写云端、冲突按 `updatedAt` 合并，全部通过。
+
+## 部署到 EdgeOne Pages（步骤）
+
+1. 在 **EdgeOne Pages 控制台** 新建项目，关联本仓库 `Jeas-Code/DailyTask`（或上传 `index.html` + `functions/`）。
+2. **创建 KV 命名空间**：EdgeOne 控制台「KV 存储」→ 创建命名空间（如 `dailytask_kv`）。
+3. **绑定到项目**：项目设置 → KV 存储 → 绑定命名空间，变量名务必填 **`TASK_SYNC`**（代码以此名读取 `context.env.TASK_SYNC`）。
+4. 部署后访问分配的域名，`/api/sync` 即生效。
+5. 任意设备打开页面 → 「更多」→ 自动同步区 → 填**相同同步密钥** → 勾选「开启」→ 保存。多端填同一密钥即共享数据。
+
+> 注：本机无 EdgeOne CLI、`edgeone-pages` 连接器当前断开；部署通过连接器（连接后由工具执行）或控制台手动完成。
+
 ## 链接
 
-- 线上（手机/PC 共用）：https://2d82a6af9388416eb87882901ca7517e.sh3.agentos-app.net
+- 线上（手机/PC 共用）：https://2d82a6af9388416eb87882901ca7517e.sh3.agentos-app.net （CloudStudio 旧托管，仍可用；EdgeOne 部署后替换为此处）
 - 源代码：https://github.com/Jeas-Code/DailyTask
