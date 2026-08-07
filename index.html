@@ -360,6 +360,9 @@ footer{text-align:center;color:var(--mute);font-size:12.5px;padding:26px 16px 8p
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span style="font-size:13px;color:var(--sub);font-weight:600">跨端同步</span>
         <span style="font-size:12px;color:var(--mute)">手机/PC 数据不互通，用同步码手动迁移</span>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--sub);cursor:pointer">
+          <input type="checkbox" id="syncAI" checked style="width:auto;min-height:0;margin:0;accent-color:var(--pri)"> 含 AI 配置
+        </label>
         <button class="btn sm" onclick="copySyncCode()">复制同步码</button>
         <button class="btn sm ghost" onclick="toggleSyncInput()">粘贴同步码</button>
       </div>
@@ -1262,8 +1265,12 @@ function doMerge(incoming){
 }
 
 /* ---------- 跨端同步 ---------- */
-function encodeSync(){
-  var payload = { app:'daily-task-workbench', version:1, exportedAt:new Date().toISOString(), tasks:state.tasks };
+function encodeSync(withAI){
+  var cfg = {};
+  if(withAI){
+    try{ cfg = JSON.parse(localStorage.getItem(K_AI) || '{}'); }catch(e){ cfg = {}; }
+  }
+  var payload = { app:'daily-task-workbench', version:2, exportedAt:new Date().toISOString(), tasks:state.tasks, aicfg:cfg };
   return btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
 }
 function decodeSync(str){
@@ -1272,17 +1279,19 @@ function decodeSync(str){
   var json = decodeURIComponent(escape(atob(s)));
   var data = JSON.parse(json);
   var incoming = Array.isArray(data) ? data : (data.tasks || []);
-  if(!Array.isArray(incoming) || !incoming.length) throw new Error('同步码里没有任务数据');
-  return incoming;
+  if(!Array.isArray(incoming)) throw new Error('同步码格式不正确');
+  return { tasks: incoming, aicfg: (data && data.aicfg) ? data.aicfg : null };
 }
 function copySyncCode(){
-  var code = encodeSync();
+  var withAI = $('syncAI') ? $('syncAI').checked : false;
+  var code = encodeSync(withAI);
+  var tail = withAI ? '（已含 AI 配置，请勿在不信任的聊天窗口发送明文 Key）' : '';
   if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(code).then(function(){ toast('同步码已复制，去另一台设备粘贴'); }, function(){ fallbackCopy(code); });
-  }else fallbackCopy(code);
-  function fallbackCopy(text){
+    navigator.clipboard.writeText(code).then(function(){ toast('同步码已复制，去另一台设备粘贴' + tail); }, function(){ fallbackCopy(code, tail); });
+  }else fallbackCopy(code, tail);
+  function fallbackCopy(text, t){
     var ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
-    try{ document.execCommand('copy'); toast('同步码已复制，去另一台设备粘贴'); }catch(e){ toast('复制失败，请手动复制弹窗内容'); alert(text.slice(0,200)+'…（共 '+text.length+' 字符）'); }
+    try{ document.execCommand('copy'); toast('同步码已复制，去另一台设备粘贴' + t); }catch(e){ toast('复制失败，请手动复制弹窗内容'); alert(text.slice(0,200)+'…（共 '+text.length+' 字符）'); }
     ta.remove();
   }
 }
@@ -1290,12 +1299,22 @@ function toggleSyncInput(){
   $('syncInputWrap').classList.toggle('hide');
   if(!$('syncInputWrap').classList.contains('hide')) $('syncInput').focus();
 }
+function applyAICfg(cfg){
+  if(!cfg) return false;
+  try{ localStorage.setItem(K_AI, JSON.stringify(cfg)); return true; }catch(e){ return false; }
+}
 function importSyncCode(){
   var str = $('syncInput').value || '';
   try{
-    var incoming = decodeSync(str);
-    confirmBox('从同步码恢复', '同步码包含 <b>' + incoming.length + '</b> 条任务。<br><br>选择「确认」= 与当前数据合并（按 id 去重，同 id 以同步码为准）。<br>当前已有 ' + state.tasks.length + ' 条。', function(){
-      doMerge(incoming);
+    var dec = decodeSync(str);
+    if(!dec.tasks.length) throw new Error('同步码里没有任务数据');
+    var msg = '同步码包含 <b>' + dec.tasks.length + '</b> 条任务。';
+    if(dec.aicfg && (dec.aicfg.base || dec.aicfg.key)) msg += '<br>同时包含 <b>AI 配置</b>（含 API Key），将一并写入本机。';
+    msg += '<br><br>选择「确认」= 与当前数据合并（按 id 去重，同 id 以同步码为准）。<br>当前已有 ' + state.tasks.length + ' 条。';
+    confirmBox('从同步码恢复', msg, function(){
+      doMerge(dec.tasks);
+      if(applyAICfg(dec.aicfg)){ refreshAIStatus(); toast('已合并任务并写入 AI 配置'); }
+      else toast('已合并 ' + state.tasks.length + ' 条任务');
       $('syncInput').value = ''; $('syncInputWrap').classList.add('hide');
     });
   }catch(err){ toast('同步码无效：' + err.message); }
