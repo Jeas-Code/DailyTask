@@ -73,9 +73,21 @@
 4. 部署后访问分配的域名，`/api/sync` 即生效。
 5. 任意设备打开页面 → 「更多」→ 自动同步区 → 填**相同同步密钥** → 勾选「开启」→ 保存。多端填同一密钥即共享数据。
 
-> 注：本机无 EdgeOne CLI、`edgeone-pages` 连接器当前断开；部署通过连接器（连接后由工具执行）或控制台手动完成。
+> 注：`edgeone-pages` 连接器已连接（2026-08-07），已通过 Makers 部署，见下方链接。
 
 ## 链接
 
-- 线上（手机/PC 共用）：https://2d82a6af9388416eb87882901ca7517e.sh3.agentos-app.net （CloudStudio 旧托管，仍可用；EdgeOne 部署后替换为此处）
+- **EdgeOne Pages 正式部署（2026-08-07）**：https://daily-task-workbench-2pzvf6lp.edgeone.cool?eo_token=da067a7b0d4ca36b2e1e715cff4c6c78&eo_time=1786104161
+  - 项目 ID：`makers-jgn6hqoaq3b8`（中国站）；含 `functions/` → fullstack 类型部署，Functions 路由已通（`/api/sync` 返回业务 JSON）
+  - 链接带鉴权 token（eo_token/eo_time），去掉参数 401；token 约 3 小时有效，过期后需在控制台重新获取
+  - **待办：KV 未绑定**——`/api/sync` 当前返回 500「KV 未绑定」，需在控制台创建 KV 命名空间并绑定变量名 `TASK_SYNC`
+- 线上（手机/PC 共用，CloudStudio 旧托管，仍可用）：https://2d82a6af9388416eb87882901ca7517e.sh3.agentos-app.net
 - 源代码：https://github.com/Jeas-Code/DailyTask
+
+## 迭代 v5：UI 视觉升级（背景更明显 + 圆角玻璃卡片）
+
+- **背景图更明显**：`body::before` 透明度 浅色 0.12→0.20 / 深色 0.06→0.13；新增 `background-size:cover` + 轻微 `saturate/brightness` 滤镜，封面式铺满屏幕。
+- **玻璃拟态卡片**：`--card / --modal / --aibg / --nav-bg` 改为半透明 + `backdrop-filter:blur(16px) saturate(165%)`，背景图透过卡片可见。
+- **更大圆角**：全局 `--r` 14→18px、`--r-s` 10→13px；按钮 10→12px、搜索框/分段控件/弹窗 16→22px、复选框 7→10px、logo 10→12px 同步加大。
+- **层次与悬浮**：卡片 / KPI 增加柔和阴影 + hover 上浮动效；主按钮带紫色投影；今日卡片加内高光。深色模式补 `--sh-lg` 阴影。
+- 全程零外链、未改动 base64 背景图与任何 JS；CRLF 行尾保持不变（最小化 diff）。
