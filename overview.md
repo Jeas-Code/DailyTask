@@ -77,7 +77,7 @@
 
 ## 链接
 
-- **EdgeOne Pages 正式部署（2026-08-07）**：https://daily-task-workbench-2pzvf6lp.edgeone.cool?eo_token=da067a7b0d4ca36b2e1e715cff4c6c78&eo_time=1786104161
+- **EdgeOne Pages 正式部署（2026-08-07）**：https://daily-task-workbench-2pzvf6lp.edgeone.cool?eo_token=657cb89649bd5478a4f286c4889a433b&eo_time=1786340883
   - 项目 ID：`makers-jgn6hqoaq3b8`（中国站）；含 `functions/` → fullstack 类型部署，Functions 路由已通（`/api/sync` 返回业务 JSON）
   - 链接带鉴权 token（eo_token/eo_time），去掉参数 401；token 约 3 小时有效，过期后需在控制台重新获取
   - **待办：KV 未绑定**——`/api/sync` 当前返回 500「KV 未绑定」，需在控制台创建 KV 命名空间并绑定变量名 `TASK_SYNC`
