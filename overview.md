@@ -77,11 +77,12 @@
 
 ## 链接
 
-- **EdgeOne Pages 正式部署（2026-08-07）**：https://daily-task-workbench-2pzvf6lp.edgeone.cool?eo_token=657cb89649bd5478a4f286c4889a433b&eo_time=1786340883
+- **EdgeOne Pages 正式部署（2026-08-07）**：https://daily-task-workbench-2pzvf6lp.edgeone.cool?eo_token=94c48bbad875290f8e3df18d93aaf2f3&eo_time=1786346703
   - 项目 ID：`makers-jgn6hqoaq3b8`（中国站）；含 `functions/` → fullstack 类型部署，Functions 路由已通（`/api/sync` 返回业务 JSON）
   - 链接带鉴权 token（eo_token/eo_time），去掉参数 401；token 约 3 小时有效，过期后需在控制台重新获取
   - **待办：KV 未绑定**——`/api/sync` 当前返回 500「KV 未绑定」，需在控制台创建 KV 命名空间并绑定变量名 `TASK_SYNC`
-- 线上（手机/PC 共用，CloudStudio 旧托管，仍可用）：https://2d82a6af9388416eb87882901ca7517e.sh3.agentos-app.net
+- **CloudStudio 部署（v5，2026-08-10）**：https://f0d171f06d914ea7b518a07a63bb66b8.gz4.agentos-app.net（免 token，纯静态；`/api/sync` 不在此端生效，同步后端仅 EdgeOne 有）
+- 线上旧工作区（仍 v4，未更新）：https://2d82a6af9388416eb87882901ca7517e.sh3.agentos-app.net —— 部署工具无法按 ID 指定更新，需从 CloudStudio 控制台重部署该工作区才会变 v5
 - 源代码：https://github.com/Jeas-Code/DailyTask
 
 ## 迭代 v5：UI 视觉升级（背景更明显 + 圆角玻璃卡片）
