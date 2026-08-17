@@ -15,7 +15,7 @@
 | 属性 | 说明 |
 |---|---|
 | 技术栈 | 原生 HTML5 + CSS3 + ES6，SVG 手绘图表 |
-| 存储 | 浏览器 localStorage（默认）+ EdgeOne Pages KV（可选同步） |
+| 存储 | 浏览器 localStorage（默认）+ GitHub Gist（可选同步，免 KV 审批） |
 | 依赖 | 零外部依赖，离线可用 |
 | 图标 | 零 emoji，全部内联 SVG |
 
@@ -114,17 +114,18 @@ DailyTask/
 
 > CloudStudio 只托管静态文件，`/api/sync` 不会生效。若需要跨端同步，请使用 EdgeOne Pages 部署。
 
-### 方式二：EdgeOne Pages（静态 + Functions + KV 同步）
+### 方式二：任意静态托管 + GitHub Gist 同步（推荐）
 
-适合「手机 / PC / 平板实时同步任务」的场景。
+适合「手机 / PC / 平板实时同步任务」的场景。同步后端改为**前端直连 GitHub Gist**，**无需 EdgeOne KV 审批**，CloudStudio / EdgeOne Pages / GitHub Pages 任意静态托管都能用。
 
-1. 在 [EdgeOne Pages 控制台](https://console.cloud.tencent.com/edgeone/pages) 新建项目，关联本仓库 `Jeas-Code/DailyTask`。
-2. 创建 **KV 命名空间**（如 `dailytask_kv`）。
-3. 在项目设置中绑定命名空间，变量名务必填 **`TASK_SYNC`**。
-4. 部署项目（fullstack 类型，因为包含 `functions/`）。
-5. 多端打开页面 →「更多」→ 自动同步区 → 填写**相同的同步密钥** → 勾选「开启」→ 保存。
+1. 将 `index.html` 部署到任意静态托管（EdgeOne Pages 静态 / CloudStudio / GitHub Pages 均可，不再需要 Functions）。
+2. 打开页面 →「更多」→ 自动同步区：
+   - 填写 **GitHub Token**（需勾选 `gist` 权限，生成地址 `github.com/settings/tokens`）；Token 仅存本机浏览器，不上传任何服务器。
+   - **Gist ID** 留空则首次同步自动新建私有 Gist；多设备填**相同 Gist ID** 即共享同一份数据。
+   - 勾选「开启」→ 保存。
+3. 其他设备填相同 Gist ID + 各自 GitHub Token，即可实时互相同步（每 20s 自动拉取）。
 
-> 当前 EdgeOne 项目的 KV 开通仍在审批中，审批通过后 `/api/sync` 即可正常工作。审批期间不影响静态页面使用。
+> 数据存于你的**私有 Gist**（仅本账户可见）。合并策略为 per-task last-write-wins（按 `updatedAt`）+ 删除墓碑传播，多端增删改均正确收敛。原 EdgeOne KV 方案（`functions/api/sync.js`）已停用，仅在 KV 审批通过后按需切回。
 
 ---
 
@@ -142,7 +143,7 @@ DailyTask/
 ## 已知边界
 
 - **CORS 限制**：浏览器直连模型接口受目标服务商 CORS 策略限制。DeepSeek、OpenAI 等主流服务通常支持；若报 `Failed to fetch`，请换用支持 CORS 的服务或走中转网关。
-- **KV 审批**：EdgeOne Pages KV 存储开通需平台审批，目前仍在审批中，`/api/sync` 暂时返回 500「KV 未绑定」。审批通过并完成绑定后即可正常使用。
+- **同步后端**：云端同步走 GitHub Gist 前端直连，无需 EdgeOne KV 审批；首次同步自动建私有 Gist，多设备填相同 Gist ID 即共享数据。
 - **链接 token 时效**：EdgeOne Pages 的预览链接带 `eo_token/eo_time` 鉴权参数，token 约 3 小时有效，过期后需在控制台重新获取或重新部署。
 - **公共设备提醒**：部署到公网后页面任何人可访问，但数据仍保存在各自浏览器（或各自的同步密钥空间）。公共设备使用完后请清除本地数据或 API Key。
 
@@ -157,6 +158,7 @@ DailyTask/
 | v3 | - | 背景图 + 周分组 + 同步码迁移 + 项目迁移到 GitHub |
 | v4 | - | EdgeOne Pages KV 真同步（per-task last-write-wins + 删除墓碑） |
 | v5 | 2026-08-10 | 背景图更明显 + 圆角玻璃卡片 UI 升级 |
+| v6 | 2026-08-17 | 云端同步从 EdgeOne Pages KV 迁移到 GitHub Gist 前端直连（免 KV 审批，任意静态托管均可同步）；EdgeOne `sync.js` 降级为 410 废弃占位 |
 
 完整迭代细节见 [`overview.md`](./overview.md)。
 
