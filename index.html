@@ -381,8 +381,11 @@ footer{text-align:center;color:var(--mute);font-size:12.5px;padding:26px 16px 8p
         <input id="syncKey" placeholder="Gist ID（留空自动新建·多设备填相同）" style="min-height:34px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--txt);font-size:13px;width:200px;max-width:100%">
         <input id="ghToken" type="password" placeholder="GitHub Token（需 gist 权限）" style="min-height:34px;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--field);color:var(--txt);font-size:13px;width:210px;max-width:100%">
         <button class="btn sm pri" onclick="saveSyncCfg()">保存同步设置</button>
+        <button class="btn sm" onclick="testSync()">测试连接</button>
+        <button class="btn sm" onclick="manualSync()">立即同步</button>
         <span id="syncStatus" style="font-size:12px;color:var(--mute)"></span>
       </div>
+      <div id="gistIdHint" style="font-size:11px;color:var(--pri);margin-top:6px;display:none"></div>
       <div style="font-size:11px;color:var(--mute);margin-top:6px;line-height:1.5">数据存于你的私有 Gist（仅本账户可见，Token 仅存本机）。多设备填相同 Gist ID + 各自 Token 即共享同一份数据。</div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px">
         <span style="font-size:12px;color:var(--mute)">手动迁移（兜底）：</span>
@@ -1378,6 +1381,7 @@ function saveSyncCfg(){
     setSyncStatus('已关闭');
     toast('自动同步已关闭');
   }
+  showGistIdHint();
 }
 function schedulePush(){
   if(!syncOn || !syncKey || !ghToken) return;
@@ -1393,6 +1397,7 @@ async function pushSync(){
     if(!syncKey){
       syncKey = await gistCreate(payload);
       try{ localStorage.setItem(K_SYNC_KEY, syncKey); var ki = $('syncKey'); if(ki) ki.value = syncKey; }catch(e){}
+      showGistIdHint();
     } else {
       try{
         var remote = await gistGet(syncKey);
@@ -1417,6 +1422,46 @@ async function pullSync(){
       setSyncStatus('已同步 ' + clock());
     }
   }catch(e){ setSyncStatus('拉取失败'); }
+}
+function showGistIdHint(){
+  var el = $('gistIdHint');
+  if(!el) return;
+  if(syncKey){ el.style.display = ''; el.textContent = '当前 Gist ID：' + syncKey + '（复制此 ID 填到其他设备即可共享同一份数据）'; }
+  else { el.style.display = 'none'; }
+}
+async function testSync(){
+  if(!ghToken){ toast('请先填写 GitHub Token'); $('ghToken').focus(); return; }
+  setSyncStatus('连接测试中…');
+  try{
+    if(syncKey){
+      var d = await gistGet(syncKey);
+      setSyncStatus('连接正常 ✓ 云端 ' + (d.tasks ? d.tasks.length : 0) + ' 条任务');
+      toast('Token 有效，Gist 可正常读取');
+    } else {
+      var tmp = await gistCreate({ rev: 0, tasks: [], aicfg: null });
+      await fetch('https://api.github.com/gists/' + encodeURIComponent(tmp), { method: 'DELETE', headers: ghHeaders() });
+      setSyncStatus('连接正常 ✓ 可创建/删除 Gist');
+      toast('Token 有效，可正常同步');
+    }
+    if(syncOn) showGistIdHint();
+  }catch(e){
+    setSyncStatus('连接失败：' + (e && e.message ? e.message : ''));
+    toast('连接失败，检查 Token 是否含 gist 权限');
+  }
+}
+async function manualSync(){
+  if(!syncKey || !ghToken){ toast('请先填写 Gist ID 和 Token 并保存'); return; }
+  setSyncStatus('同步中…');
+  try{
+    if(syncOn) await pushSync();
+    await pullSync();
+    showGistIdHint();
+    setSyncStatus('已同步 ' + clock());
+    toast('已立即同步');
+  }catch(e){
+    setSyncStatus('同步失败：' + (e && e.message ? e.message : ''));
+    toast('同步失败，详见状态栏');
+  }
 }
 /* ---------- 跨端同步（手动迁移码） ---------- */
 function encodeSync(withAI){

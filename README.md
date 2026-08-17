@@ -124,6 +124,7 @@ DailyTask/
    - **Gist ID** 留空则首次同步自动新建私有 Gist；多设备填**相同 Gist ID** 即共享同一份数据。
    - 勾选「开启」→ 保存。
 3. 其他设备填相同 Gist ID + 各自 GitHub Token，即可实时互相同步（每 20s 自动拉取）。
+4. 面板新增 **「测试连接」**（一键验证 Token/Gist 是否可用）与 **「立即同步」**（手动触发一次双向同步）；保存设置或首次推送后，面板会直接显示当前 Gist ID，复制填到其他设备即可共享。
 
 > 数据存于你的**私有 Gist**（仅本账户可见）。合并策略为 per-task last-write-wins（按 `updatedAt`）+ 删除墓碑传播，多端增删改均正确收敛。原 EdgeOne KV 方案（`functions/api/sync.js`）已停用，仅在 KV 审批通过后按需切回。
 
