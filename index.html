@@ -1372,8 +1372,8 @@ function saveSyncCfg(){
   }catch(e){}
   if(syncOn){
     setSyncStatus('正在同步…');
-    pullSync();
     if(!_pullIv) _pullIv = setInterval(pullSync, 20000);
+    pushSync();
     schedulePush();
     toast('自动同步已开启');
   }else{
@@ -1384,12 +1384,12 @@ function saveSyncCfg(){
   showGistIdHint();
 }
 function schedulePush(){
-  if(!syncOn || !syncKey || !ghToken) return;
+  if(!syncOn || !ghToken) return;
   clearTimeout(_pushTm);
   _pushTm = setTimeout(pushSync, 700);
 }
 async function pushSync(){
-  if(!syncOn || !syncKey || !ghToken) return;
+  if(!syncOn || !ghToken) return;
   try{
     var aicfg = null;
     try{ aicfg = JSON.parse(localStorage.getItem(K_AI) || 'null'); }catch(e){}
@@ -1450,7 +1450,7 @@ async function testSync(){
   }
 }
 async function manualSync(){
-  if(!syncKey || !ghToken){ toast('请先填写 Gist ID 和 Token 并保存'); return; }
+  if(!ghToken){ toast('请先填写 GitHub Token 并保存'); return; }
   setSyncStatus('同步中…');
   try{
     if(syncOn) await pushSync();
